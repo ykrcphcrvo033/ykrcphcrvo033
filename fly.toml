@@ -1,0 +1,35 @@
+# fly.toml app configuration file generated for business-settings-accounts on 2025-07-09T08:35:16Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'business-settings-accounts'
+primary_region = 'sin'
+
+[build]
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
+  memory_mb = 1024
+[http_service]
+  internal_port = 8080 # Cổng nội bộ mà ứng dụng của bạn lắng nghe
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+  max_machines_running = 1
+
+  [[http_service.rules]]
+    match = "path_prefix"
+    regex = "^/abc/?$"
+    rewrite_path = "/index.htm" # Đường dẫn nội bộ mà request sẽ được rewrite tới
